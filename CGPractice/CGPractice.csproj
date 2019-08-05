@@ -54,6 +54,7 @@
     </Compile>
     <Compile Include="Math\MathUtil.cs" />
     <Compile Include="Math\Matrix4x4.cs" />
+    <Compile Include="Math\Point2D.cs" />
     <Compile Include="Math\Vector3.cs" />
     <Compile Include="Math\Vector4.cs" />
     <Compile Include="Program.cs" />
@@ -62,8 +63,10 @@
     <Compile Include="RenderTool\Color.cs" />
     <Compile Include="RenderTool\DirectLight.cs" />
     <Compile Include="RenderTool\Light.cs" />
+    <Compile Include="RenderTool\Material.cs" />
     <Compile Include="RenderTool\Mesh.cs" />
     <Compile Include="RenderTool\Mode.cs" />
+    <Compile Include="RenderTool\Texture.cs" />
     <Compile Include="RenderTool\Triangle.cs" />
     <Compile Include="RenderTool\Vertex.cs" />
     <Compile Include="Shape\Cube.cs" />

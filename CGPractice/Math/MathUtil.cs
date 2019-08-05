@@ -154,8 +154,8 @@ namespace CGPractice.Math
         {
             v.onePerz = MathUtil.Lerp(v1.onePerz, v2.onePerz, t);
             //
-            //v.u = MathUntil.Lerp(v1.u, v2.u, t);
-            //v.v = MathUntil.Lerp(v1.v, v2.v, t);
+            v.u = MathUtil.Lerp(v1.u, v2.u, t);
+            v.v = MathUtil.Lerp(v1.v, v2.v, t);
             //
             v.color = MathUtil.Lerp(v1.color, v2.color, t);
             //

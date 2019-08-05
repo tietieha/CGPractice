@@ -30,12 +30,12 @@ namespace CGPractice
         private Camera camera;
         private Light ambientLight;
 
+        private Texture _texture;        //纹理
+
         // 开关
         private LightMode lightMode = LightMode.Off;
         private RenderMode renderMode = RenderMode.Wireframe;
-
-        // 统计数据
-        private uint _viewTrisCount;    //测试数据，记录当前显示的三角形数
+        
         public Form1()
         {
             InitializeComponent();
@@ -48,11 +48,15 @@ namespace CGPractice
             _frameG = Graphics.FromImage(_frameBuff);
 
             cube = new Cube("testCube");
-            camera = new Camera(new Vector3(0, 0, -3), new Vector3(0, 0, 1), new Vector3(0, 1, 0), (float)(System.Math.PI / 4),
+            camera = new Camera(new Vector3(0, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0), (float)(System.Math.PI / 4),
                 this.MaximumSize.Width / (float)this.MaximumSize.Height, 1f, 500f);
-            ambientLight = new Light(new Vector3(-50, 0, 0), new RenderTool.Color(1, 1, 1));
+            ambientLight = new Light(new Vector3(50, 0, 0), new RenderTool.Color(1, 1, 1));
 
-            System.Timers.Timer mainTimer = new System.Timers.Timer(1000 / 30f);
+
+            _texture = new Texture("../../texture/复件 env2.bmp", 256, 256);
+            //_texture = new Texture("../../texture/texture.jpg", 256, 256);
+
+            System.Timers.Timer mainTimer = new System.Timers.Timer(1000 / 60f);
             mainTimer.Elapsed += new ElapsedEventHandler(Tick);
             mainTimer.AutoReset = true;
             mainTimer.Enabled = true;
@@ -66,8 +70,8 @@ namespace CGPractice
             {
                 ClearBuff();
                 rot += 0.05f;
-                Matrix4x4 m = MathUtil.GetRotation(new Vector3(1, 1, 0), rot) * MathUtil.GetTranlate(0, 0, 0) * MathUtil.GetScale(cube.scale);
-                //Matrix4x4 m = MathUtil.GetRotationX(cube.rotation.x) * MathUtil.GetRotationY(cube.rotation.y) * MathUtil.GetTranlate(0, 0, 0) * MathUtil.GetScale(cube.scale);
+                //Matrix4x4 m = MathUtil.GetRotation(new Vector3(1, 1, 0), rot) * MathUtil.GetTranlate(0, 0, 0) * MathUtil.GetScale(cube.scale);
+                Matrix4x4 m = MathUtil.GetRotationX(rot) * MathUtil.GetTranlate(0, 0, 10) * MathUtil.GetScale(cube.scale);
                 Matrix4x4 v = MathUtil.GetView(camera);
                 Matrix4x4 p = MathUtil.GetProject(camera);
                 Draw(m, v, p);
@@ -89,7 +93,6 @@ namespace CGPractice
 
         private void Draw(Matrix4x4 m, Matrix4x4 v, Matrix4x4 p)
         {
-            _viewTrisCount = 0;
             // 遍历点画
             for (int i = 0; i < cube.mesh.triangles.Length; i++)
             {
@@ -124,12 +127,19 @@ namespace CGPractice
             Transform_MV(m, v, ref v2);
             Transform_MV(m, v, ref v3);
             //Log.debug("mv", v1.pos.ToString());
+            // 相机空间进行背面消隐
+            if (BackFaceCulling(v1, v2, v3) == false)
+                return;
 
-            // 齐次坐标
+            // 齐次裁剪空间
             Transform_P(p, ref v1);
             Transform_P(p, ref v2);
             Transform_P(p, ref v3);
             //Log.debug("pro", v1.pos.ToString());
+
+            // 齐次坐标的剪裁
+            if (!Clip(v1) || !Clip(v2) || !Clip(v3))
+                return;
 
             // 齐次 到 屏幕
             TransformToScreen(ref v1);
@@ -148,122 +158,43 @@ namespace CGPractice
             else
             {
                 TrisRasterization(v1, v2, v3);
-                //trianglesRasterization(v1, v2, v3);
             }
         }
 
-        private void trianglesRasterization(Vertex v1, Vertex v2, Vertex v3)
+        private bool Clip(Vertex v)
         {
-            // 进行排序，v1总在最上面，v2总在最中间，v3总在最下面
-            if (v1.pos.y > v2.pos.y)
-            {
-                var temp = v2;
-                v2 = v1;
-                v1 = temp;
-            }
-
-            if (v2.pos.y > v3.pos.y)
-            {
-                var temp = v2;
-                v2 = v3;
-                v3 = temp;
-            }
-
-            if (v1.pos.y > v2.pos.y)
-            {
-                var temp = v2;
-                v2 = v1;
-                v1 = temp;
-            }
-
-            // 反向斜率
-            float dP1P2, dP1P3;
-
-            // 计算反向斜率
-            if (v2.pos.y - v1.pos.y > 0)
-                dP1P2 = (v2.pos.x - v1.pos.x) / (v2.pos.y - v1.pos.y);
-            else
-                dP1P2 = 0;
-
-            if (v3.pos.y - v1.pos.y > 0)
-                dP1P3 = (v3.pos.x - v1.pos.x) / (v3.pos.y - v1.pos.y);
-            else
-                dP1P3 = 0;
-
-            // 对于第一种情况来说，三角形是这样的：
-            // P1
-            // -
-            // --
-            // - -
-            // -  -
-            // -   - P2
-            // -  -
-            // - -
-            // -
-            // P3
-            if (dP1P2 > dP1P3)
-            {
-                for (var y = (int)v1.pos.y; y <= (int)v3.pos.y; y++)
-                {
-                    if (y < v2.pos.y)
-                    {
-                        ProcessScanLine(y, v1, v3, v1, v2);
-                    }
-                    else
-                    {
-                        ProcessScanLine(y, v1, v3, v2, v3);
-                    }
-                }
-            }
-            // 对于第二种情况来说，三角形是这样的：
-            //       P1
-            //        -
-            //       --
-            //      - -
-            //     -  -
-            // P2 -   -
-            //     -  -
-            //      - -
-            //        -
-            //       P3
-            else
-            {
-                for (var y = (int)v1.pos.y; y <= (int)v3.pos.y; y++)
-                {
-                    if (y < v2.pos.y)
-                    {
-                        ProcessScanLine(y, v1, v2, v1, v3);
-                    }
-                    else
-                    {
-                        ProcessScanLine(y, v2, v3, v1, v3);
-                    }
-                }
-            }
+            if (v.pos.x >= -1 && v.pos.x <= 1 &&
+                v.pos.y >= -1 && v.pos.y <= 1 &&
+                v.pos.z >= 0f && v.pos.z <= 1)
+                return true;
+            return false;
         }
 
-        // 在两点之间从左到右绘制一条线段
-        // papb -> pcpd
-        // pa, pb, pc, pd在之前必须已经排好序
-        void ProcessScanLine(int y, Vertex pa, Vertex pb, Vertex pc, Vertex pd)
+        /// <summary>
+        /// 背面消隐
+        /// </summary>
+        /// <returns>是否通关背面消隐测试</returns>
+        private bool BackFaceCulling(Vertex p1, Vertex p2, Vertex p3)
         {
-            // 由当前的y值，我们可以计算出梯度
-            // 以此再计算出 起始X(sx) 和 结束X(ex)
-            // 如果 pa.pos.y == pb.pos.y 或者 pc.pos.y== pd.pos.y 的话，梯度强制为1
-            var gradient1 = pa.pos.y != pb.pos.y ? (y - pa.pos.y) / (pb.pos.y - pa.pos.y) : 1;
-            var gradient2 = pc.pos.y != pd.pos.y ? (y - pc.pos.y) / (pd.pos.y - pc.pos.y) : 1;
-
-            int sx = (int)MathUtil.Lerp(pa.pos.x, pb.pos.x, gradient1);
-            int ex = (int)MathUtil.Lerp(pc.pos.x, pd.pos.x, gradient2);
-
-            // 从左(sx)向右(ex)绘制一条线
-            for (var x = sx; x < ex; x++)
+            if (renderMode == RenderMode.Wireframe)
             {
-                if (x >= 0 && x <= this.MaximumSize.Width && y >= 0 && y <= this.MaximumSize.Height)
-                    _frameBuff.SetPixel(x, y, Color.White);
+                //线框模式不进行背面消隐
+                return true;
+            }
+            else
+            {
+                Vector3 v1 = p2.pos - p1.pos;
+                Vector3 v2 = p3.pos - p2.pos;
+                Vector3 normal = Vector3.Cross(v1, v2);
+                //由于在视空间中，所以相机点就是（0,0,0）
+                Vector3 viewDir = p1.pos - new Vector3(0, 0, 0);
+                if (Vector3.Dot(normal, viewDir) > 0)
+                {
+                    return true;
+                }
+                return false;
             }
         }
-
 
         private void TrisRasterization(Vertex v1, Vertex v2, Vertex v3)
         {
@@ -303,7 +234,6 @@ namespace CGPractice
             else
             {//分割三角形
                 Vertex top;
-
                 Vertex bottom;
                 Vertex middle;
                 if (v1.pos.y > v2.pos.y && v2.pos.y > v3.pos.y)
@@ -459,46 +389,43 @@ namespace CGPractice
                         lerpFactor = (x - left.pos.x) / dx;
                     }
                     // 1/z’与x’和y'是线性关系的
-                    float onePreZ = MathUtil.Lerp(left.onePerz, right.onePerz, lerpFactor);
-                    if (onePreZ >= _zBuff[yIndex, xIndex])//使用1/z进行深度测试
+                    float onePerZ = MathUtil.Lerp(left.onePerz, right.onePerz, lerpFactor);
+                    if (onePerZ >= _zBuff[yIndex, xIndex])//使用1/z进行深度测试
                     {//通过测试
-                        float w = 1 / onePreZ;
-                        _zBuff[yIndex, xIndex] = onePreZ;
+                        float w = 1 / onePerZ;
+                        _zBuff[yIndex, xIndex] = onePerZ;
+                        RenderTool.Color finalColor = new RenderTool.Color(1, 1, 1);
 
-                        //插值顶点颜色
-                        RenderTool.Color vertColor = MathUtil.Lerp(left.color, right.color, lerpFactor);
-                        //插值光照颜色
-                        RenderTool.Color lightColor = MathUtil.Lerp(left.lightColor, right.lightColor, lerpFactor); ;
+                        if (RenderMode.Texture == renderMode)
+                        {
+                            //uv 插值，求纹理颜色
+                            float u = MathUtil.Lerp(left.u, right.u, lerpFactor) * w * (_texture.Width - 1);
+                            float v = MathUtil.Lerp(left.v, right.v, lerpFactor) * w * (_texture.Height - 1);
+                            int uIndex = (int)System.Math.Round(u, MidpointRounding.AwayFromZero);
+                            int vIndex = (int)System.Math.Round(v, MidpointRounding.AwayFromZero);
+                            uIndex = MathUtil.Range(uIndex, 0, _texture.Width - 1);
+                            vIndex = MathUtil.Range(vIndex, 0, _texture.Height - 1);
+                            finalColor = new RenderTool.Color(_texture.ReadTexture(uIndex, vIndex));//转到自定义的color进行计算
+                        }
+                        else if (RenderMode.VertexColor == renderMode)
+                        {
+                            //插值顶点颜色
+                            RenderTool.Color vertColor = MathUtil.Lerp(left.color, right.color, lerpFactor);
+                            finalColor = vertColor;
+                        }
 
 
                         if (lightMode == LightMode.On)
-                        {//光照模式，需要混合光照的颜色
-                            if (RenderMode.Texture == renderMode)
-                            {
-                                //RenderTool.Color finalColor = texColor * lightColor;
-                                //_frameBuff.SetPixel(xIndex, yIndex, finalColor.TransFormToSystemColor());
-                            }
-                            else if (RenderMode.VertexColor == renderMode)
-                            {
-                                RenderTool.Color finalColor = vertColor * lightColor;
-                                _frameBuff.SetPixel(xIndex, yIndex, finalColor.TranstoSysColor());
-                            }
-                        }
-                        else
                         {
-                            if (RenderMode.Texture == renderMode)
-                            {
-                                //_frameBuff.SetPixel(xIndex, yIndex, texColor.TransFormToSystemColor());
-                            }
-                            else if (RenderMode.VertexColor == renderMode)
-                            {
-                                _frameBuff.SetPixel(xIndex, yIndex, vertColor.TranstoSysColor());
-                            }
+                            //插值光照颜色
+                            RenderTool.Color lightColor = MathUtil.Lerp(left.lightColor, right.lightColor, lerpFactor);
+                            //光照模式，需要混合光照的颜色
+                            finalColor = finalColor * lightColor;
                         }
+                        _frameBuff.SetPixel(xIndex, yIndex, finalColor.TranstoSysColor());
                     }
                 }
             }
-
         }
 
         /// <summary>
@@ -515,7 +442,7 @@ namespace CGPractice
             normal = normal.Normaized();
 
             // 环境光
-            RenderTool.Color ambient = ambientLight.lightColor * 0.5f;
+            RenderTool.Color ambient = ambientLight.lightColor * 1f;
 
             // 高光
             // 光照方向
@@ -525,7 +452,7 @@ namespace CGPractice
             // 反射
             Vector4 reflectDir = Vector4.Dot(lightDir, normal) * normal;
             double spe = System.Math.Pow(MathUtil.Range(Vector4.Dot(viewDir, reflectDir), 0, 1), 32);
-            RenderTool.Color spectorColor = (float)spe * ambientLight.lightColor * 1.0f;
+            RenderTool.Color spectorColor = ambientLight.lightColor * cube.mesh.material.specular * (float)spe;
 
             v.lightColor = ambient + spectorColor;
         }
@@ -594,19 +521,24 @@ namespace CGPractice
         {
             Vector4 tmp = (new Vector4(vertex.pos, 1)) * m * v;
             //Log.debug("mv", tmp.ToString());
-            if (tmp.w != 0)
-                vertex.pos = new Vector3(tmp.x / tmp.w, tmp.y / tmp.w, tmp.z / tmp.w);
-            else
-                vertex.pos = new Vector3(tmp.x, tmp.y, tmp.z);
+            vertex.onePerz = 1 / tmp.w;
+            vertex.pos.x = tmp.x * vertex.onePerz;
+            vertex.pos.y = tmp.y * vertex.onePerz;
+            vertex.pos.z = tmp.z * vertex.onePerz;
         }
 
-        private void Transform_P(Matrix4x4 p, ref Vertex v)
+        private void Transform_P(Matrix4x4 p, ref Vertex vertex)
         {
-            Vector4 tmp = new Vector4(v.pos, 1) * p;
-            v.pos = new Vector3(tmp.x / tmp.w, tmp.y / tmp.w, tmp.z / tmp.w);
-            v.onePerz = 1 / tmp.w;
-            //v.color *= v.onePerz;
-            //v.lightColor *= v.onePerz;
+            Vector4 tmp = new Vector4(vertex.pos, 1) * p;
+            vertex.onePerz = 1 / tmp.w;
+            vertex.pos.x = tmp.x * vertex.onePerz;
+            vertex.pos.y = tmp.y * vertex.onePerz;
+            vertex.pos.z = tmp.z * vertex.onePerz;
+
+            vertex.u *= vertex.onePerz;
+            vertex.v *= vertex.onePerz;
+            //vertex.color *= vertex.onePerz;
+            //vertex.lightColor *= vertex.onePerz;
         }
         /// <summary>
         /// 从齐次剪裁坐标系转到屏幕坐标

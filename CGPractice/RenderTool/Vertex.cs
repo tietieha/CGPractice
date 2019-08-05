@@ -19,12 +19,20 @@ namespace CGPractice.RenderTool
         // 深度矫正
         public float onePerz;
 
-        public Vertex(Vector3 pos, Color color)
+        /// <summary>
+        /// 纹理坐标
+        /// </summary>
+        public float u;
+        public float v;
+
+        public Vertex(Vector3 pos, Color color, float u, float v)
         {
             this.pos = pos;
             this.color = color;
             this.lightColor = new Color(1, 1, 1);
             this.onePerz = 1;
+            this.u = u;
+            this.v = v;
         }
 
     }

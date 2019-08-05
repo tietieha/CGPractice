@@ -22,6 +22,13 @@ namespace CGPractice.RenderTool
             this._b = MathUtil.Range(b, 0, 1);
         }
 
+        public Color(System.Drawing.Color color)
+        {
+            this._r = MathUtil.Range(color.R / 255, 0, 1);
+            this._g = MathUtil.Range(color.G / 255, 0, 1);
+            this._b = MathUtil.Range(color.B / 255, 0, 1);
+        }
+
         // get/set
         public float r
         {
